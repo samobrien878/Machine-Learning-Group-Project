@@ -14,46 +14,38 @@ df = pd.read_csv(file_path)
 
 # Function to standardize street names dynamically
 def standardize_street_name(street):
-    # Remove trailing directions (N, S, E, W)
-    street = re.sub(r'\s[NSWE]$', '', street)
-    # Remove dashes (e.g., "I-95" -> "I95")
-    street = street.replace('-', '')
-    # Add additional cleaning rules as necessary (e.g., merging variations)
+    street = re.sub(r'\s[NSWE]$', '', street)  # Remove trailing directions (N, S, E, W)
+    street = street.replace('-', '')  # Remove dashes (e.g., "I-95" -> "I95")
     return street
 
 # Ensure all values in the Street column are strings and handle missing values
-df['Street'] = df['Street'].fillna('Unknown')  # Replace NaN with 'Unknown'
-df['Street'] = df['Street'].astype(str)        # Convert all values to strings
-
-# Apply the function to standardize street names
-df['Street'] = df['Street'].apply(standardize_street_name)
+df['Street'] = df['Street'].fillna('Unknown').astype(str).apply(standardize_street_name)
 
 # Step 1: Preprocessing
 street_accident_counts = df.groupby('Street').size().reset_index(name='Accident_Count')
 street_accident_counts_sorted = street_accident_counts.sort_values(by='Accident_Count', ascending=False)
-top_500_streets = street_accident_counts_sorted.head(150)
+top_150_streets = street_accident_counts_sorted.head(150)
 
-filtered_df = df[df['Street'].isin(top_500_streets['Street'])].copy()
+filtered_df = df[df['Street'].isin(top_150_streets['Street'])].copy()
 
 filtered_df['Start_Time'] = pd.to_datetime(filtered_df['Start_Time'], format='%Y-%m-%d %H:%M:%S', errors='coerce')
-filtered_df['YearMonth'] = filtered_df['Start_Time'].dt.to_period('M')
 filtered_df['Month'] = filtered_df['Start_Time'].dt.month
 
-monthly_accidents = filtered_df.groupby(['Street', 'YearMonth']).size().reset_index(name='Accident_Count')
+# Aggregate Data for Modeling
+monthly_accidents = filtered_df.groupby(['Street', 'Month']).size().reset_index(name='Accident_Count')
 
-weather_features = filtered_df.groupby(['Street', 'YearMonth']).agg({
+weather_features = filtered_df.groupby(['Street', 'Month']).agg({
     'Temperature(F)': 'mean',
     'Humidity(%)': 'mean',
     'Pressure(in)': 'mean',
     'Visibility(mi)': 'mean',
     'Wind_Speed(mph)': 'mean',
     'Precipitation(in)': 'sum',
-    'Weather_Condition': lambda x: x.mode()[0] if not x.mode().empty else 'Unknown',
-    'Month': 'first'
+    'Weather_Condition': lambda x: x.mode()[0] if not x.mode().empty else 'Unknown'
 }).reset_index()
 
-monthly_accidents_with_weather = pd.merge(monthly_accidents, weather_features, on=['Street', 'YearMonth'], how='left')
-
+# Merge accident data with weather features
+monthly_accidents_with_weather = pd.merge(monthly_accidents, weather_features, on=['Street', 'Month'], how='left')
 monthly_accidents_with_weather.dropna(inplace=True)
 
 # Encode categorical variables
@@ -71,7 +63,6 @@ location_features = ['Bump', 'Crossing', 'Give_Way', 'Junction', 'No_Exit', 'Rai
                      'Turning_Loop', 'Sunrise_Sunset', 'Civil_Twilight', 'Nautical_Twilight',
                      'Astronomical_Twilight']
 
-# Ensure binary columns are in the DataFrame
 for feature in location_features:
     if feature not in monthly_accidents_with_weather.columns:
         monthly_accidents_with_weather[feature] = 0
@@ -81,95 +72,65 @@ features = ['Street_Encoded', 'Temperature(F)', 'Humidity(%)', 'Pressure(in)', '
             'Precipitation(in)', 'Weather_Condition_Encoded', 'Month'] + \
            [f'Weather_{weather}' for weather in weather_types] + location_features
 
-# Step 2: Prepare Data for Regression
-X = monthly_accidents_with_weather[features]  # Use same features as before
-y = monthly_accidents_with_weather['Accident_Count']  # Use accident count as the target
+X = monthly_accidents_with_weather[features]
+y = monthly_accidents_with_weather['Accident_Count']
 
 # Train-Test Split
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# Step 3: Regression Model - Random Forest Regressor
-regressor = RandomForestRegressor(random_state=42)
+# Step 2: Simplified Random Forest Regressor
+regressor = RandomForestRegressor(n_estimators=100, max_depth=20, random_state=42)
 regressor.fit(X_train, y_train)
+y_pred_test = regressor.predict(X_test)
+y_pred_train = regressor.predict(X_train)
 
-# Predictions
-y_pred = regressor.predict(X_test)
+# Metrics
+train_r2 = r2_score(y_train, y_pred_train)
+test_r2 = r2_score(y_test, y_pred_test)
+mae = mean_absolute_error(y_test, y_pred_test)
+mse = mean_squared_error(y_test, y_pred_test)
 
-# Step 4: Model Evaluation
-mae = mean_absolute_error(y_test, y_pred)
-mse = mean_squared_error(y_test, y_pred)
-r2 = r2_score(y_test, y_pred)
-
-print(f"Mean Absolute Error (MAE): {mae}")
-print(f"Mean Squared Error (MSE): {mse}")
-print(f"R² Score: {r2}")
-
-# Step 5: Feature Importance Visualization
-plt.figure(figsize=(12, 6))
-plt.bar(X.columns, regressor.feature_importances_)
-plt.xlabel("Features")
-plt.ylabel("Importance")
-plt.title("Feature Importance in Random Forest Regressor")
-plt.xticks(rotation=45)
-plt.tight_layout()
-plt.show()
-
-# Step 6: Visualize Predictions for the Top 10 Streets
+# Add Predictions to DataFrame
 test_set = monthly_accidents_with_weather.loc[X_test.index].copy()
-test_set['Predicted_Accidents'] = y_pred
+test_set['Predicted_Accidents'] = y_pred_test
 
-top_10_streets = test_set.groupby('Street')['Predicted_Accidents'].sum().nlargest(10).index
-top_10_data = test_set[test_set['Street'].isin(top_10_streets)]
+# Step 3: Aggregate Predictions by Month
+monthly_predictions = test_set.groupby('Month')['Predicted_Accidents'].sum().reset_index()
 
+# Step 4: Central Visualization - What the Model Predicts
 plt.figure(figsize=(14, 8))
-sns.barplot(data=top_10_data, x='Month', y='Predicted_Accidents', hue='Street', ci=None)  # No error bars
-plt.title("Top 10 Streets - Predicted Accident Counts by Month")
-plt.xlabel("Month")
-plt.ylabel("Predicted Accident Count")
-plt.xticks(ticks=np.arange(1, 13), labels=[
+sns.barplot(data=monthly_predictions, x='Month', y='Predicted_Accidents', palette='viridis')
+plt.title("What the Model Predicts: Predicted Accident Counts by Month", fontsize=16)
+plt.xlabel("Month", fontsize=14)
+plt.ylabel("Predicted Accident Counts", fontsize=14)
+plt.xticks(ticks=np.arange(12), labels=[
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
 ], rotation=45, ha="right")
-plt.legend(title="Street", bbox_to_anchor=(1.05, 1), loc='upper left')
 plt.tight_layout()
 plt.show()
 
-
-# Evaluate Model Performance on Training Data
-y_train_pred = regressor.predict(X_train)
-
-# Calculate Metrics for Training Data
-mae_train = mean_absolute_error(y_train, y_train_pred)
-mse_train = mean_squared_error(y_train, y_train_pred)
-r2_train = r2_score(y_train, y_train_pred)
-
-# Calculate Metrics for Test Data (already done earlier)
-mae_test = mean_absolute_error(y_test, y_pred)
-mse_test = mean_squared_error(y_test, y_pred)
-r2_test = r2_score(y_test, y_pred)
-
-# Print Performance Metrics for Both Training and Test Data
-print("Training Data Performance:")
-print(f"  Mean Absolute Error (MAE): {mae_train}")
-print(f"  Mean Squared Error (MSE): {mse_train}")
-print(f"  R² Score: {r2_train}\n")
-
-print("Test Data Performance:")
-print(f"  Mean Absolute Error (MAE): {mae_test}")
-print(f"  Mean Squared Error (MSE): {mse_test}")
-print(f"  R² Score: {r2_test}")
-
-# Visualize Actual vs Predicted for Training Data
+# Step 5: Model Performance - Predicted vs Actual
 plt.figure(figsize=(10, 6))
-sns.scatterplot(x=y_train, y=y_train_pred, alpha=0.6, label="Training Data")
-sns.scatterplot(x=y_test, y=y_pred, alpha=0.6, label="Test Data", color='orange')
-plt.plot([y.min(), y.max()], [y.min(), y.max()], 'r--', lw=2, label="Ideal Fit")
-plt.title("Actual vs Predicted Accident Counts (Training vs Test)")
-plt.xlabel("Actual Accident Count")
-plt.ylabel("Predicted Accident Count")
+sns.scatterplot(x=y_test, y=y_pred_test, alpha=0.7, color="blue", label="Data Points")
+plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], color='red', linestyle='--', label="Perfect Prediction")
+plt.title("Predicted vs Actual Accident Counts", fontsize=16)
+plt.xlabel("Actual Accident Counts", fontsize=14)
+plt.ylabel("Predicted Accident Counts", fontsize=14)
 plt.legend()
 plt.tight_layout()
 plt.show()
 
+# Step 6: Feature Importance Visualization
+plt.figure(figsize=(12, 8))
+sorted_idx = np.argsort(regressor.feature_importances_)
+plt.barh(X.columns[sorted_idx], regressor.feature_importances_[sorted_idx], color='skyblue')
+plt.xlabel("Feature Importance", fontsize=14)
+plt.ylabel("Features", fontsize=14)
+plt.title("Feature Importance in Random Forest Regressor", fontsize=16)
+plt.tight_layout()
+plt.show()
 
-
+# Print Metrics and Insights
+print(f"Train R² = {train_r2:.4f}, Test R² = {test_r2:.4f}")
+print(f"MAE = {mae:.4f}, MSE = {mse:.4f}")
