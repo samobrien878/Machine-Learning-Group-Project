@@ -79,7 +79,7 @@ y = monthly_accidents_with_weather['Accident_Count']
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2, random_state = 42)
 
 # Step 2: Simplified Random Forest Regressor
-regressor = RandomForestRegressor(n_estimators = 110, max_depth = 22, random_state = 46)
+regressor = RandomForestRegressor(n_estimators = 100, max_depth = 20, random_state = 42)
 regressor.fit(X_train, y_train)
 y_pred_test = regressor.predict(X_test)
 y_pred_train = regressor.predict(X_train)
