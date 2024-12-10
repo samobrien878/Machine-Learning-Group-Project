@@ -22,17 +22,17 @@ def standardize_street_name(street):
 df['Street'] = df['Street'].fillna('Unknown').astype(str).apply(standardize_street_name)
 
 # Step 1: Preprocessing
-street_accident_counts = df.groupby('Street').size().reset_index(name='Accident_Count')
-street_accident_counts_sorted = street_accident_counts.sort_values(by='Accident_Count', ascending=False)
+street_accident_counts = df.groupby('Street').size().reset_index(name = 'Accident_Count')
+street_accident_counts_sorted = street_accident_counts.sort_values(by = 'Accident_Count', ascending = False)
 top_150_streets = street_accident_counts_sorted.head(150)
 
 filtered_df = df[df['Street'].isin(top_150_streets['Street'])].copy()
 
-filtered_df['Start_Time'] = pd.to_datetime(filtered_df['Start_Time'], format='%Y-%m-%d %H:%M:%S', errors='coerce')
+filtered_df['Start_Time'] = pd.to_datetime(filtered_df['Start_Time'], format = '%Y-%m-%d %H:%M:%S', errors = 'coerce')
 filtered_df['Month'] = filtered_df['Start_Time'].dt.month
 
 # Aggregate Data for Modeling
-monthly_accidents = filtered_df.groupby(['Street', 'Month']).size().reset_index(name='Accident_Count')
+monthly_accidents = filtered_df.groupby(['Street', 'Month']).size().reset_index(name = 'Accident_Count')
 
 weather_features = filtered_df.groupby(['Street', 'Month']).agg({
     'Temperature(F)': 'mean',
@@ -45,8 +45,8 @@ weather_features = filtered_df.groupby(['Street', 'Month']).agg({
 }).reset_index()
 
 # Merge accident data with weather features
-monthly_accidents_with_weather = pd.merge(monthly_accidents, weather_features, on=['Street', 'Month'], how='left')
-monthly_accidents_with_weather.dropna(inplace=True)
+monthly_accidents_with_weather = pd.merge(monthly_accidents, weather_features, on = ['Street', 'Month'], how = 'left')
+monthly_accidents_with_weather.dropna(inplace = True)
 
 # Encode categorical variables
 monthly_accidents_with_weather['Street_Encoded'] = LabelEncoder().fit_transform(monthly_accidents_with_weather['Street'])
@@ -55,7 +55,7 @@ monthly_accidents_with_weather['Weather_Condition_Encoded'] = LabelEncoder().fit
 # Weather conditions as binary features
 weather_types = ['Rain', 'Snow', 'Fog', 'Clear', 'Cloudy']
 for weather in weather_types:
-    monthly_accidents_with_weather[f'Weather_{weather}'] = monthly_accidents_with_weather['Weather_Condition'].str.contains(weather, case=False, na=False).astype(int)
+    monthly_accidents_with_weather[f'Weather_{weather}'] = monthly_accidents_with_weather['Weather_Condition'].str.contains(weather, case = False, na = False).astype(int)
 
 # Location features
 location_features = ['Bump', 'Crossing', 'Give_Way', 'Junction', 'No_Exit', 'Railway',
@@ -76,10 +76,10 @@ X = monthly_accidents_with_weather[features]
 y = monthly_accidents_with_weather['Accident_Count']
 
 # Train-Test Split
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2, random_state = 42)
 
 # Step 2: Simplified Random Forest Regressor
-regressor = RandomForestRegressor(n_estimators=100, max_depth=20, random_state=42)
+regressor = RandomForestRegressor(n_estimators = 100, max_depth = 20, random_state = 42)
 regressor.fit(X_train, y_train)
 y_pred_test = regressor.predict(X_test)
 y_pred_train = regressor.predict(X_train)
@@ -98,36 +98,36 @@ test_set['Predicted_Accidents'] = y_pred_test
 monthly_predictions = test_set.groupby('Month')['Predicted_Accidents'].sum().reset_index()
 
 # Step 4: Central Visualization - What the Model Predicts
-plt.figure(figsize=(14, 8))
-sns.barplot(data=monthly_predictions, x='Month', y='Predicted_Accidents', palette='viridis')
-plt.title("What the Model Predicts: Predicted Accident Counts by Month", fontsize=16)
-plt.xlabel("Month", fontsize=14)
-plt.ylabel("Predicted Accident Counts", fontsize=14)
-plt.xticks(ticks=np.arange(12), labels=[
+plt.figure(figsize = (14, 8))
+sns.barplot(data = monthly_predictions, x = 'Month', y = 'Predicted_Accidents', palette = 'viridis')
+plt.title("What the Model Predicts: Predicted Accident Counts by Month", fontsize = 16)
+plt.xlabel("Month", fontsize = 14)
+plt.ylabel("Predicted Accident Counts", fontsize = 14)
+plt.xticks(ticks = np.arange(12), labels = [
     'January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'
-], rotation=45, ha="right")
+], rotation = 45, ha = "right")
 plt.tight_layout()
 plt.show()
 
 # Step 5: Model Performance - Predicted vs Actual
-plt.figure(figsize=(10, 6))
-sns.scatterplot(x=y_test, y=y_pred_test, alpha=0.7, color="blue", label="Data Points")
-plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], color='red', linestyle='--', label="Perfect Prediction")
-plt.title("Predicted vs Actual Accident Counts", fontsize=16)
-plt.xlabel("Actual Accident Counts", fontsize=14)
-plt.ylabel("Predicted Accident Counts", fontsize=14)
+plt.figure(figsize = (10, 6))
+sns.scatterplot(x = y_test, y = y_pred_test, alpha = 0.7, color = "blue", label = "Data Points")
+plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()], color = 'red', linestyle = '--', label = "Perfect Prediction")
+plt.title("Predicted vs Actual Accident Counts", fontsize = 16)
+plt.xlabel("Actual Accident Counts", fontsize = 14)
+plt.ylabel("Predicted Accident Counts", fontsize = 14)
 plt.legend()
 plt.tight_layout()
 plt.show()
 
 # Step 6: Feature Importance Visualization
-plt.figure(figsize=(12, 8))
+plt.figure(figsize = (12, 8))
 sorted_idx = np.argsort(regressor.feature_importances_)
-plt.barh(X.columns[sorted_idx], regressor.feature_importances_[sorted_idx], color='skyblue')
-plt.xlabel("Feature Importance", fontsize=14)
-plt.ylabel("Features", fontsize=14)
-plt.title("Feature Importance in Random Forest Regressor", fontsize=16)
+plt.barh(X.columns[sorted_idx], regressor.feature_importances_[sorted_idx], color = 'skyblue')
+plt.xlabel("Feature Importance", fontsize = 14)
+plt.ylabel("Features", fontsize = 14)
+plt.title("Feature Importance in Random Forest Regressor", fontsize = 16)
 plt.tight_layout()
 plt.show()
 
