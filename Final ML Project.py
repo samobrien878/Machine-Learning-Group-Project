@@ -98,7 +98,7 @@ test_set['Predicted_Accidents'] = y_pred_test
 monthly_predictions = test_set.groupby('Month')['Predicted_Accidents'].sum().reset_index()
 
 # Step 4: Central Visualization - What the Model Predicts
-plt.figure(figsize = (14, 8))
+plt.figure(figsize = (10, 6))
 sns.barplot(data = monthly_predictions, x = 'Month', y = 'Predicted_Accidents', palette = 'viridis')
 plt.title("What the Model Predicts: Predicted Accident Counts by Month", fontsize = 16)
 plt.xlabel("Month", fontsize = 14)
@@ -122,7 +122,7 @@ plt.tight_layout()
 plt.show()
 
 # Step 6: Feature Importance Visualization
-plt.figure(figsize = (12, 8))
+plt.figure(figsize = (10, 6))
 sorted_idx = np.argsort(regressor.feature_importances_)
 plt.barh(X.columns[sorted_idx], regressor.feature_importances_[sorted_idx], color = 'skyblue')
 plt.xlabel("Feature Importance", fontsize = 14)
