@@ -94,7 +94,7 @@ mse = mean_squared_error(y_test, y_pred_test)
 test_set = monthly_accidents_with_weather.loc[X_test.index].copy()
 test_set['Predicted_Accidents'] = y_pred_test
 
-# Step 3: Aggregate Predictions by Month
+# Step 3: Aggregate Predictions by each Month
 monthly_predictions = test_set.groupby('Month')['Predicted_Accidents'].sum().reset_index()
 
 # Step 4: Central Visualization - What the Model Predicts
